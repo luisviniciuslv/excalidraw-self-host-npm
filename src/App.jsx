@@ -259,11 +259,8 @@ export default function App() {
       ws.send(JSON.stringify({ type: "join-room", roomId: activeRoomId }));
     });
 
-    ws.addEventListener("close", () => {
-      setStatus("disconnected");
-    });
-
     ws.addEventListener("close", (event) => {
+      setStatus("disconnected");
       if (event.code === 4401) {
         window.location.href = "/";
       }
