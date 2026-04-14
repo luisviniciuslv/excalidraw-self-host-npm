@@ -30,6 +30,8 @@ app.use(express.urlencoded({ extended: false }));
 const rooms = new Map();
 let roomsLoadPromise = null;
 let db = null;
+const persistTimersByRoomId = new Map();
+const ROOM_PERSIST_DEBOUNCE_MS = 180;
 
 function loadDotEnv() {
 	const envPath = path.resolve(__dirname, ".env");
@@ -360,6 +362,24 @@ function persistRoom(room) {
 	);
 }
 
+function schedulePersistRoom(room) {
+	if (!room || typeof room.id !== "string") {
+		return;
+	}
+
+	const existingTimer = persistTimersByRoomId.get(room.id);
+	if (existingTimer) {
+		clearTimeout(existingTimer);
+	}
+
+	const timer = setTimeout(() => {
+		persistTimersByRoomId.delete(room.id);
+		persistRoom(room);
+	}, ROOM_PERSIST_DEBOUNCE_MS);
+
+	persistTimersByRoomId.set(room.id, timer);
+}
+
 function deleteRoomFromDatabase(roomId) {
 	initializeDatabase();
 	db.prepare("DELETE FROM rooms WHERE id = ?").run(roomId);
@@ -403,6 +423,11 @@ function deleteRoom(roomId) {
 	}
 
 	rooms.delete(roomId);
+	const pendingTimer = persistTimersByRoomId.get(roomId);
+	if (pendingTimer) {
+		clearTimeout(pendingTimer);
+		persistTimersByRoomId.delete(roomId);
+	}
 	deleteRoomFromDatabase(roomId);
 	return true;
 }
@@ -639,7 +664,7 @@ function setupCollaboration() {
 				room.scene = mergeScene(room.scene, payload.scene);
 				room.sceneVersion += 1;
 				room.updatedAt = new Date().toISOString();
-				persistRoom(room);
+				schedulePersistRoom(room);
 
 				const broadcastData = JSON.stringify({
 					type: "scene-sync",

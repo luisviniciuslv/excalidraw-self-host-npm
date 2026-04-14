@@ -107,10 +107,45 @@ export default function App() {
   const lastSentSceneVersionRef = useRef(0);
   const pendingSceneRef = useRef(null);
   const pendingSceneVersionRef = useRef(0);
+  const latestIncomingSceneRef = useRef(null);
+  const latestIncomingSceneVersionRef = useRef(0);
+  const hasIncomingSceneScheduledRef = useRef(false);
+  const lastAppliedRemoteSceneVersionRef = useRef(0);
   const latestSceneRef = useRef({
     scene: { elements: [], files: {} },
     sceneVersion: 0
   });
+
+  function applyIncomingSceneNow() {
+    if (!excalidrawApiRef.current || !latestIncomingSceneRef.current) {
+      return;
+    }
+
+    suppressNextBroadcastRef.current = true;
+    latestSceneRef.current = {
+      scene: latestIncomingSceneRef.current,
+      sceneVersion: latestIncomingSceneVersionRef.current
+    };
+    lastAppliedRemoteSceneVersionRef.current = latestIncomingSceneVersionRef.current;
+    excalidrawApiRef.current.updateScene({
+      elements: latestIncomingSceneRef.current.elements || [],
+      files: latestIncomingSceneRef.current.files || {}
+    });
+
+    latestIncomingSceneRef.current = null;
+  }
+
+  function scheduleApplyIncomingScene() {
+    if (hasIncomingSceneScheduledRef.current) {
+      return;
+    }
+
+    hasIncomingSceneScheduledRef.current = true;
+    requestAnimationFrame(() => {
+      hasIncomingSceneScheduledRef.current = false;
+      applyIncomingSceneNow();
+    });
+  }
 
   function getSceneVersion(elements = []) {
     let version = 0;
@@ -231,6 +266,10 @@ export default function App() {
     pendingSceneRef.current = null;
     lastSentSceneVersionRef.current = 0;
     pendingSceneVersionRef.current = 0;
+    latestIncomingSceneRef.current = null;
+    latestIncomingSceneVersionRef.current = 0;
+    hasIncomingSceneScheduledRef.current = false;
+    lastAppliedRemoteSceneVersionRef.current = 0;
     suppressNextBroadcastRef.current = false;
   }, [activeRoomId]);
 
@@ -271,6 +310,7 @@ export default function App() {
       scene: pendingSceneRef.current,
       sceneVersion: pendingSceneVersionRef.current || lastSentSceneVersionRef.current
     };
+    lastAppliedRemoteSceneVersionRef.current = Number(latestSceneRef.current.sceneVersion || 0);
     excalidrawApiRef.current.updateScene({
       elements: pendingSceneRef.current.elements || [],
       files: pendingSceneRef.current.files || {}
@@ -347,6 +387,11 @@ export default function App() {
         return;
       }
 
+      const incomingSceneVersion = Number(payload.sceneVersion || 0);
+      if (incomingSceneVersion <= lastAppliedRemoteSceneVersionRef.current) {
+        return;
+      }
+
       if (!excalidrawApiRef.current) {
         const currentScene = latestSceneRef.current.scene || { elements: [], files: {} };
         pendingSceneRef.current = {
@@ -356,7 +401,7 @@ export default function App() {
             ...(payload.scene.files || {})
           }
         };
-        pendingSceneVersionRef.current = Number(payload.sceneVersion || 0);
+        pendingSceneVersionRef.current = incomingSceneVersion;
         return;
       }
 
@@ -369,15 +414,12 @@ export default function App() {
         }
       };
 
-      suppressNextBroadcastRef.current = true;
-      latestSceneRef.current = {
-        scene: mergedScene,
-        sceneVersion: Number(payload.sceneVersion || 0)
-      };
-      excalidrawApiRef.current.updateScene({
-        elements: mergedScene.elements,
-        files: mergedScene.files
-      });
+      if (incomingSceneVersion > latestIncomingSceneVersionRef.current) {
+        latestIncomingSceneRef.current = mergedScene;
+        latestIncomingSceneVersionRef.current = incomingSceneVersion;
+      }
+
+      scheduleApplyIncomingScene();
     });
 
     return () => {
