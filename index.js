@@ -448,7 +448,17 @@ function compareElementVersion(left, right) {
 
 	const leftNonce = Number(left?.versionNonce || 0);
 	const rightNonce = Number(right?.versionNonce || 0);
-	return leftNonce - rightNonce;
+	if (leftNonce !== rightNonce) {
+		return leftNonce - rightNonce;
+	}
+
+	const leftUpdated = Number(left?.updated || 0);
+	const rightUpdated = Number(right?.updated || 0);
+	if (leftUpdated !== rightUpdated) {
+		return leftUpdated - rightUpdated;
+	}
+
+	return 0;
 }
 
 function mergeElements(existingElements = [], incomingElements = []) {
@@ -466,7 +476,7 @@ function mergeElements(existingElements = [], incomingElements = []) {
 		}
 
 		const currentElement = mergedById.get(element.id);
-		if (!currentElement || compareElementVersion(currentElement, element) < 0) {
+		if (!currentElement || compareElementVersion(currentElement, element) <= 0) {
 			mergedById.set(element.id, element);
 		}
 	}
