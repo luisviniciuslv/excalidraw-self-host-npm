@@ -103,7 +103,7 @@ export default function App() {
 
   const excalidrawApiRef = useRef(null);
   const socketRef = useRef(null);
-  const suppressNextBroadcastRef = useRef(false);
+  const suppressBroadcastUntilRef = useRef(0);
   const lastSentSceneVersionRef = useRef(0);
   const pendingSceneRef = useRef(null);
   const pendingSceneVersionRef = useRef(0);
@@ -121,7 +121,7 @@ export default function App() {
       return;
     }
 
-    suppressNextBroadcastRef.current = true;
+    suppressBroadcastUntilRef.current = Date.now() + 70;
     latestSceneRef.current = {
       scene: latestIncomingSceneRef.current,
       sceneVersion: latestIncomingSceneVersionRef.current
@@ -280,7 +280,7 @@ export default function App() {
     latestIncomingSceneVersionRef.current = 0;
     hasIncomingSceneScheduledRef.current = false;
     lastAppliedRemoteSceneVersionRef.current = 0;
-    suppressNextBroadcastRef.current = false;
+    suppressBroadcastUntilRef.current = 0;
   }, [activeRoomId]);
 
   useEffect(() => {
@@ -315,7 +315,7 @@ export default function App() {
       return;
     }
 
-    suppressNextBroadcastRef.current = true;
+    suppressBroadcastUntilRef.current = Date.now() + 70;
     latestSceneRef.current = {
       scene: pendingSceneRef.current,
       sceneVersion: pendingSceneVersionRef.current || lastSentSceneVersionRef.current
@@ -511,8 +511,7 @@ export default function App() {
   }
 
   function handleChange(elements, appState, files) {
-    if (suppressNextBroadcastRef.current) {
-      suppressNextBroadcastRef.current = false;
+    if (Date.now() <= suppressBroadcastUntilRef.current) {
       return;
     }
 
