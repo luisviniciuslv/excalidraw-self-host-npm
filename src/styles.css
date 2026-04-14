@@ -11,7 +11,7 @@ body,
 body {
   margin: 0;
   font-family: Segoe UI, Tahoma, Geneva, Verdana, sans-serif;
-  background: #eef2f7;
+  background: linear-gradient(180deg, #eef2f7 0%, #e7ecf4 100%);
   color: #1c2533;
 }
 
@@ -30,6 +30,12 @@ body {
   gap: 8px;
   color: #3b4a5c;
   padding: 0 4px;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .title-wrap {
@@ -60,10 +66,122 @@ body {
   background: #f6f9fd;
 }
 
+.workspace-layout {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: 12px;
+}
+
+.rooms-panel {
+  min-height: 0;
+  border: 1px solid #d9e0ec;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  padding: 12px;
+  overflow: auto;
+}
+
+.rooms-panel__title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.rooms-panel__title strong {
+  font-size: 0.95rem;
+}
+
+.rooms-panel__title small,
+.rooms-empty,
+.rooms-error {
+  color: #66758a;
+  font-size: 0.82rem;
+}
+
+.rooms-error {
+  color: #a64646;
+  margin: 0 0 8px;
+}
+
+.rooms-list {
+  display: grid;
+  gap: 8px;
+}
+
+.room-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: stretch;
+  padding: 8px;
+  border-radius: 10px;
+  border: 1px solid #d9e0ec;
+  background: #fff;
+}
+
+.room-item--active {
+  border-color: #9db6d4;
+  box-shadow: 0 0 0 2px rgba(157, 182, 212, 0.2);
+}
+
+.room-item__open {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.room-item__open span {
+  font-weight: 700;
+  color: #263445;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.room-item__open small {
+  font-size: 0.75rem;
+  color: #6a7789;
+}
+
+.room-item__delete {
+  border: 1px solid #e3b4b4;
+  background: #fff7f7;
+  color: #9a3d3d;
+  border-radius: 8px;
+  padding: 0 10px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.room-item__delete:hover {
+  background: #ffecec;
+}
+
 .canvas-wrap {
   min-height: 0;
   border: 1px solid #d9e0ec;
   border-radius: 10px;
   overflow: hidden;
   background: #fff;
+}
+
+@media (max-width: 920px) {
+  .workspace-layout {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(420px, 1fr);
+  }
+
+  .rooms-panel {
+    max-height: 240px;
+  }
 }
