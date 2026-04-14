@@ -1,0 +1,69 @@
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: Segoe UI, Tahoma, Geneva, Verdana, sans-serif;
+  background: #eef2f7;
+  color: #1c2533;
+}
+
+.app-shell {
+  height: 100%;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  padding: 12px;
+  gap: 8px;
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: #3b4a5c;
+  padding: 0 4px;
+}
+
+.title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.title-wrap small {
+  font-size: 0.78rem;
+  color: #5f6f82;
+}
+
+.copy-btn {
+  border: 1px solid #ccd7e6;
+  background: #ffffff;
+  color: #2f3b4b;
+  border-radius: 8px;
+  padding: 7px 10px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.copy-btn:hover {
+  background: #f6f9fd;
+}
+
+.canvas-wrap {
+  min-height: 0;
+  border: 1px solid #d9e0ec;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #fff;
+}

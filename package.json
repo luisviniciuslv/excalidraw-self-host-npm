@@ -1,0 +1,25 @@
+{
+  "name": "excalidraw-self-host",
+  "version": "1.0.0",
+  "description": "",
+  "license": "ISC",
+  "author": "",
+  "scripts": {
+    "dev": "node index.js",
+    "build": "vite build",
+    "preview": "vite preview",
+    "start": "node index.js --prod",
+    "build-start": "vite build && node index.js --prod"
+  },
+  "dependencies": {
+    "@excalidraw/excalidraw": "^0.18.0",
+    "express": "^4.21.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.4.1",
+    "vite": "^5.4.19"
+  }
+}
