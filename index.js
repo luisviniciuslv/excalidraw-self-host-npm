@@ -2,6 +2,7 @@ const path = require("node:path");
 const fs = require("node:fs");
 const http = require("node:http");
 const { randomUUID, createHmac, timingSafeEqual } = require("node:crypto");
+const { DatabaseSync } = require("node:sqlite");
 const express = require("express");
 const { WebSocketServer } = require("ws");
 
@@ -10,7 +11,7 @@ loadDotEnv();
 const PORT = Number(process.env.PORT) || 5173;
 const isProd = process.argv.includes("--prod") || process.env.NODE_ENV === "production";
 const DATA_DIR = path.resolve(__dirname, "data");
-const ROOMS_FILE = path.join(DATA_DIR, "rooms.json");
+const ROOMS_DB_FILE = path.join(DATA_DIR, "rooms.db");
 const APP_PASSWORD = process.env.APP_PASSWORD || "";
 const AUTH_SECRET = process.env.AUTH_SECRET || APP_PASSWORD;
 const AUTH_COOKIE_NAME = "excalidraw_auth";
@@ -28,6 +29,7 @@ app.use(express.urlencoded({ extended: false }));
 
 const rooms = new Map();
 let roomsLoadPromise = null;
+let db = null;
 
 function loadDotEnv() {
 	const envPath = path.resolve(__dirname, ".env");
@@ -283,67 +285,84 @@ function ensureRoom(roomId) {
 	return rooms.get(roomId);
 }
 
-async function loadRoomsFromDisk() {
+function initializeDatabase() {
+	if (db) {
+		return;
+	}
+
+	fs.mkdirSync(DATA_DIR, { recursive: true });
+	db = new DatabaseSync(ROOMS_DB_FILE);
+	db.exec(`
+		CREATE TABLE IF NOT EXISTS rooms (
+			id TEXT PRIMARY KEY,
+			scene_json TEXT NOT NULL,
+			scene_version INTEGER NOT NULL DEFAULT 0,
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL
+		)
+	`);
+}
+
+async function loadRoomsFromDatabase() {
 	if (roomsLoadPromise) {
 		return roomsLoadPromise;
 	}
 
 	roomsLoadPromise = (async () => {
-		await fs.promises.mkdir(DATA_DIR, { recursive: true });
+		initializeDatabase();
 
-		try {
-			const raw = await fs.promises.readFile(ROOMS_FILE, "utf-8");
-			const parsed = JSON.parse(raw);
-			const storedRooms = Array.isArray(parsed.rooms) ? parsed.rooms : [];
+		const rows = db
+			.prepare("SELECT id, scene_json, scene_version, created_at, updated_at FROM rooms")
+			.all();
 
-			for (const room of storedRooms) {
-				if (!room || typeof room.id !== "string") {
-					continue;
-				}
-
-				rooms.set(room.id, {
-					id: room.id,
-					clients: new Set(),
-					scene: room.scene && typeof room.scene === "object" ? room.scene : { elements: [], files: {} },
-					sceneVersion: Number(room.sceneVersion || 0),
-					createdAt: room.createdAt || new Date().toISOString(),
-					updatedAt: room.updatedAt || new Date().toISOString()
-				});
-			}
-		} catch (error) {
-			if (error.code !== "ENOENT") {
-				throw error;
+		for (const row of rows) {
+			let scene = { elements: [], files: {} };
+			try {
+				scene = JSON.parse(row.scene_json || "{}");
+			} catch {
+				scene = { elements: [], files: {} };
 			}
 
-			await saveRoomsToDisk();
+			rooms.set(row.id, {
+				id: row.id,
+				clients: new Set(),
+				scene: scene && typeof scene === "object" ? scene : { elements: [], files: {} },
+				sceneVersion: Number(row.scene_version || 0),
+				createdAt: row.created_at || new Date().toISOString(),
+				updatedAt: row.updated_at || new Date().toISOString()
+			});
 		}
 	})();
 
 	return roomsLoadPromise;
 }
 
-async function saveRoomsToDisk() {
-	await fs.promises.mkdir(DATA_DIR, { recursive: true });
+function persistRoom(room) {
+	if (!room || typeof room.id !== "string") {
+		return;
+	}
 
-	const payload = {
-		rooms: Array.from(rooms.values())
-			.filter((room) => typeof room.id === "string")
-			.map((room) => ({
-				id: room.id,
-				scene: room.scene,
-				sceneVersion: room.sceneVersion,
-				createdAt: room.createdAt,
-				updatedAt: room.updatedAt
-			}))
-	};
+	initializeDatabase();
 
-	await fs.promises.writeFile(ROOMS_FILE, JSON.stringify(payload, null, 2), "utf-8");
+	db.prepare(
+		`INSERT INTO rooms (id, scene_json, scene_version, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?)
+		 ON CONFLICT(id) DO UPDATE SET
+		 	scene_json = excluded.scene_json,
+		 	scene_version = excluded.scene_version,
+		 	updated_at = excluded.updated_at`
+	).run(
+		room.id,
+		JSON.stringify(room.scene || { elements: [], files: {} }),
+		Number(room.sceneVersion || 0),
+		room.createdAt || new Date().toISOString(),
+		room.updatedAt || new Date().toISOString()
+	);
 }
 
-function persistRooms() {
-	return saveRoomsToDisk().catch((error) => {
-		console.error("Failed to persist rooms:", error);
-	});
+function deleteRoomFromDatabase(roomId) {
+	initializeDatabase();
+	db.prepare("DELETE FROM rooms WHERE id = ?").run(roomId);
 }
 
 function generateRoomId() {
@@ -384,6 +403,7 @@ function deleteRoom(roomId) {
 	}
 
 	rooms.delete(roomId);
+	deleteRoomFromDatabase(roomId);
 	return true;
 }
 
@@ -510,7 +530,7 @@ async function setupFrontend() {
 function setupHttpApi() {
 	app.get("/api/rooms", async (_req, res, next) => {
 		try {
-			await loadRoomsFromDisk();
+			await loadRoomsFromDatabase();
 			res.json({ rooms: listRooms() });
 		} catch (error) {
 			next(error);
@@ -519,7 +539,7 @@ function setupHttpApi() {
 
 	app.put("/api/rooms/:roomId/scene", async (req, res, next) => {
 		try {
-			await loadRoomsFromDisk();
+			await loadRoomsFromDatabase();
 			const roomId = String(req.params.roomId || "");
 			const scene = req.body && typeof req.body.scene === "object" ? req.body.scene : null;
 
@@ -532,7 +552,7 @@ function setupHttpApi() {
 			room.scene = mergeScene(room.scene, scene);
 			room.sceneVersion += 1;
 			room.updatedAt = new Date().toISOString();
-			await persistRooms();
+			persistRoom(room);
 			broadcastRoomListUpdate();
 
 			res.json({ room: toSerializableRoom(room) });
@@ -543,12 +563,12 @@ function setupHttpApi() {
 
 	app.post("/api/rooms", async (req, res, next) => {
 		try {
-			await loadRoomsFromDisk();
+			await loadRoomsFromDatabase();
 			const requestedRoomId = typeof req.body?.roomId === "string" ? req.body.roomId.trim() : "";
 			const roomId = requestedRoomId || generateRoomId();
 			const room = ensureRoom(roomId);
 			room.updatedAt = new Date().toISOString();
-			await persistRooms();
+			persistRoom(room);
 			broadcastRoomListUpdate();
 			res.status(201).json({ room: toSerializableRoom(room) });
 		} catch (error) {
@@ -558,7 +578,7 @@ function setupHttpApi() {
 
 	app.delete("/api/rooms/:roomId", async (req, res, next) => {
 		try {
-			await loadRoomsFromDisk();
+			await loadRoomsFromDatabase();
 			const roomId = String(req.params.roomId || "");
 			const deleted = deleteRoom(roomId);
 			if (!deleted) {
@@ -566,7 +586,6 @@ function setupHttpApi() {
 				return;
 			}
 
-			await persistRooms();
 			broadcastRoomListUpdate();
 			res.status(204).end();
 		} catch (error) {
@@ -598,6 +617,7 @@ function setupCollaboration() {
 				const roomId = String(payload.roomId || "default");
 				currentRoomId = roomId;
 				const room = ensureRoom(roomId);
+				persistRoom(room);
 				room.clients.add(ws);
 
 				if (room.scene) {
@@ -619,7 +639,7 @@ function setupCollaboration() {
 				room.scene = mergeScene(room.scene, payload.scene);
 				room.sceneVersion += 1;
 				room.updatedAt = new Date().toISOString();
-				persistRooms();
+				persistRoom(room);
 
 				const broadcastData = JSON.stringify({
 					type: "scene-sync",
@@ -645,7 +665,7 @@ function setupCollaboration() {
 }
 
 async function start() {
-	await loadRoomsFromDisk();
+	await loadRoomsFromDatabase();
 	setupAuthRoutes();
 	app.use(authGate);
 	setupHttpApi();

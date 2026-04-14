@@ -122,6 +122,42 @@ export default function App() {
     return version;
   }
 
+  function compareElementVersion(left, right) {
+    const leftVersion = Number(left?.version || 0);
+    const rightVersion = Number(right?.version || 0);
+
+    if (leftVersion !== rightVersion) {
+      return leftVersion - rightVersion;
+    }
+
+    const leftNonce = Number(left?.versionNonce || 0);
+    const rightNonce = Number(right?.versionNonce || 0);
+    return leftNonce - rightNonce;
+  }
+
+  function mergeElements(existingElements = [], incomingElements = []) {
+    const mergedById = new Map();
+
+    for (const element of existingElements) {
+      if (element && typeof element.id === "string") {
+        mergedById.set(element.id, element);
+      }
+    }
+
+    for (const element of incomingElements) {
+      if (!element || typeof element.id !== "string") {
+        continue;
+      }
+
+      const currentElement = mergedById.get(element.id);
+      if (!currentElement || compareElementVersion(currentElement, element) < 0) {
+        mergedById.set(element.id, element);
+      }
+    }
+
+    return Array.from(mergedById.values());
+  }
+
   const shareLink = useMemo(() => {
     const url = new URL(window.location.href);
     if (activeRoomId) {
@@ -312,19 +348,35 @@ export default function App() {
       }
 
       if (!excalidrawApiRef.current) {
-        pendingSceneRef.current = payload.scene;
+        const currentScene = latestSceneRef.current.scene || { elements: [], files: {} };
+        pendingSceneRef.current = {
+          elements: mergeElements(currentScene.elements || [], payload.scene.elements || []),
+          files: {
+            ...(currentScene.files || {}),
+            ...(payload.scene.files || {})
+          }
+        };
         pendingSceneVersionRef.current = Number(payload.sceneVersion || 0);
         return;
       }
 
+      const currentScene = latestSceneRef.current.scene || { elements: [], files: {} };
+      const mergedScene = {
+        elements: mergeElements(currentScene.elements || [], payload.scene.elements || []),
+        files: {
+          ...(currentScene.files || {}),
+          ...(payload.scene.files || {})
+        }
+      };
+
       suppressNextBroadcastRef.current = true;
       latestSceneRef.current = {
-        scene: payload.scene,
+        scene: mergedScene,
         sceneVersion: Number(payload.sceneVersion || 0)
       };
       excalidrawApiRef.current.updateScene({
-        elements: payload.scene.elements || [],
-        files: payload.scene.files || {}
+        elements: mergedScene.elements,
+        files: mergedScene.files
       });
     });
 

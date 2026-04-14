@@ -78,13 +78,13 @@ http://localhost:5173/?room=abc123xy
 
 ## Persistencia de salas
 
-As salas sao salvas em `data/rooms.json`.
+As salas sao salvas em SQLite no arquivo `data/rooms.db`.
 
 Isso significa que:
 
 - a lista de salas continua disponivel apos reiniciar o servidor
 - o conteudo desenhado em cada sala tambem e persistido
-- remover uma sala apaga seu registro do arquivo
+- remover uma sala apaga seu registro do banco
 
 ## Rodar em producao
 
