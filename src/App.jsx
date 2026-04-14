@@ -82,7 +82,10 @@ export default function App() {
       }
 
       suppressBroadcastUntilRef.current = Date.now() + 300;
-      excalidrawApiRef.current.updateScene(payload.scene);
+      excalidrawApiRef.current.updateScene({
+        elements: payload.scene.elements || [],
+        files: payload.scene.files || {}
+      });
     });
 
     return () => {
@@ -121,14 +124,7 @@ export default function App() {
         sourceClientId: clientId,
         scene: {
           elements,
-          files,
-          appState: {
-            viewBackgroundColor: appState.viewBackgroundColor,
-            gridSize: appState.gridSize,
-            zoom: appState.zoom,
-            scrollX: appState.scrollX,
-            scrollY: appState.scrollY
-          }
+          files
         }
       })
     );
