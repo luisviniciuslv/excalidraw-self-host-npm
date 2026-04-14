@@ -18,10 +18,22 @@ export default function App() {
   const [roomId] = useState(() => getOrCreateRoomId());
   const [status, setStatus] = useState("connecting");
   const [copied, setCopied] = useState(false);
+  const [clientId] = useState(() => Math.random().toString(36).slice(2, 10));
 
   const excalidrawApiRef = useRef(null);
   const socketRef = useRef(null);
-  const skipNextBroadcastRef = useRef(false);
+  const suppressBroadcastUntilRef = useRef(0);
+  const lastSentSceneVersionRef = useRef(0);
+
+  function getSceneVersion(elements = []) {
+    let version = 0;
+    for (const element of elements) {
+      version += Number(element.version || 0);
+      version += Number(element.versionNonce || 0);
+      version += Number(element.isDeleted ? 1 : 0);
+    }
+    return version;
+  }
 
   const shareLink = useMemo(() => {
     const url = new URL(window.location.href);
@@ -61,11 +73,15 @@ export default function App() {
         return;
       }
 
+      if (payload.sourceClientId === clientId) {
+        return;
+      }
+
       if (!excalidrawApiRef.current) {
         return;
       }
 
-      skipNextBroadcastRef.current = true;
+      suppressBroadcastUntilRef.current = Date.now() + 300;
       excalidrawApiRef.current.updateScene(payload.scene);
     });
 
@@ -82,10 +98,15 @@ export default function App() {
   }
 
   function handleChange(elements, appState, files) {
-    if (skipNextBroadcastRef.current) {
-      skipNextBroadcastRef.current = false;
+    if (Date.now() < suppressBroadcastUntilRef.current) {
       return;
     }
+
+    const sceneVersion = getSceneVersion(elements);
+    if (sceneVersion === lastSentSceneVersionRef.current) {
+      return;
+    }
+    lastSentSceneVersionRef.current = sceneVersion;
 
     const ws = socketRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) {
@@ -96,7 +117,19 @@ export default function App() {
       JSON.stringify({
         type: "scene-update",
         roomId,
-        scene: { elements, appState, files }
+        sceneVersion,
+        sourceClientId: clientId,
+        scene: {
+          elements,
+          files,
+          appState: {
+            viewBackgroundColor: appState.viewBackgroundColor,
+            gridSize: appState.gridSize,
+            zoom: appState.zoom,
+            scrollX: appState.scrollX,
+            scrollY: appState.scrollY
+          }
+        }
       })
     );
   }

@@ -16,7 +16,8 @@ function ensureRoom(roomId) {
 	if (!rooms.has(roomId)) {
 		rooms.set(roomId, {
 			clients: new Set(),
-			scene: null
+			scene: null,
+			sceneVersion: 0
 		});
 	}
 
@@ -91,7 +92,14 @@ function setupCollaboration() {
 				room.clients.add(ws);
 
 				if (room.scene) {
-					ws.send(JSON.stringify({ type: "scene-sync", scene: room.scene }));
+					ws.send(
+						JSON.stringify({
+							type: "scene-sync",
+							scene: room.scene,
+							sceneVersion: room.sceneVersion,
+							sourceClientId: "server"
+						})
+					);
 				}
 
 				return;
@@ -99,11 +107,20 @@ function setupCollaboration() {
 
 			if (payload.type === "scene-update" && currentRoomId) {
 				const room = ensureRoom(currentRoomId);
+				const incomingSceneVersion = Number(payload.sceneVersion || 0);
+
+				if (incomingSceneVersion <= room.sceneVersion) {
+					return;
+				}
+
 				room.scene = payload.scene;
+				room.sceneVersion = incomingSceneVersion;
 
 				const broadcastData = JSON.stringify({
 					type: "scene-sync",
-					scene: payload.scene
+					scene: payload.scene,
+					sceneVersion: incomingSceneVersion,
+					sourceClientId: payload.sourceClientId || "unknown"
 				});
 
 				for (const client of room.clients) {
